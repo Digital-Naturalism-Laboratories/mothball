@@ -44,6 +44,8 @@ type FlyState = {
   vx: number
   vy: number
   until: number
+  /** Circling a ball it's too big to stick to: keeps its distance. */
+  far?: boolean
 }
 
 type Crawl = { tx: number; ty: number; amp: number; freq: number }
@@ -54,7 +56,8 @@ type Bug = {
   info: BugInfo
   zone: number
   sprite: Sprite
-  mode: 'rest' | 'perch' | 'fly' | 'stuck'
+  /** gone: zapped by the flood light to free a stuck ball; out of the game. */
+  mode: 'rest' | 'perch' | 'fly' | 'stuck' | 'gone'
   /** Home pose (rest / perch). */
   x: number
   y: number
@@ -132,8 +135,14 @@ export class Game {
   private camX = 0
   private camY = 0
   private camScale = 1
+  /** The scale actually drawn: camScale, pulled out while the flood light is on. */
+  private viewScale = 1
+  private floodZoomK = 0
   private zoomTarget = 1
-  private floodCharges: number = T.floodCharges
+  /** When the flood light can fire again. */
+  private floodReadyAt = 0
+  /** After a flash: if the ball still hasn't moved by `at`, zap whatever it's stuck on. */
+  private unstick: { at: number; x: number; y: number } | null = null
   private floodUntil = -1
   private lastKnock = -10
   private kindsSeen = new Map<string, number>()
@@ -181,7 +190,7 @@ export class Game {
     this.ballHandles.add(this.ball.core.handle)
     this.onBallResized()
     this.camX = x; this.camY = y
-    this.zoomTarget = this.camScale = this.baseScale()
+    this.zoomTarget = this.camScale = this.viewScale = this.baseScale()
 
     this.bindInput()
     this.hud.show(true)
@@ -402,8 +411,13 @@ export class Game {
     if (hop && this.ctrl.hopCooldown > 0) this.hopQueuedAt = -1
     this.ledges.update(this.ball, this.ballParts())
     this.world.step(this.events, this.ledges.hooks)
+    if (this.unstick && this.time >= this.unstick.at) this.checkUnstuck()
+
     const on = this.ledges.supporting(this.ball)
-    if (on >= 0) { if (this.gen.paths[this.gen.ledges[on]!.path]!.kind !== 'connector') this.zoneNow = this.gen.ledges[on]!.zone }
+    if (on >= 0) {
+      const l = this.gen.ledges[on]!
+      this.zoneNow = this.gen.paths[l.path]!.kind === 'connector' ? l.zone - 1 : l.zone // a ramp starts from the zone below
+    }
     else if (this.ctrl.grounded) {
       const p = this.ball.body.translation()
       if (groundYAt(this.gen.ground, p.x) - p.y < 3 * this.ball.r) this.zoneNow = 0 // down on the forest floor
@@ -453,7 +467,7 @@ export class Game {
     const bp = this.ball.body.translation()
     const r = this.ball.r
     const light = T.lightRadius * r
-    const half = (window.innerWidth / 2 / this.camScale) * 1.2
+    const half = (window.innerWidth / 2 / this.viewScale) * 1.2
     const t = this.time
     const toAttach: Bug[] = []
     const toLaunch: Array<[Bug, 'orbit' | 'flee']> = []
@@ -476,7 +490,7 @@ export class Game {
       bug.sprite.position.set(px, py)
 
       const d = Math.hypot(px - bp.x, py - bp.y)
-      if (bug.mode === 'perch' && d < r + 0.35 * L) {
+      if (bug.mode === 'perch' && d < this.catchRadius(L)) {
         if (this.canLift(bug)) toAttach.push(bug)
         else toLaunch.push([bug, 'flee']) // bumped but too big: startled
         continue
@@ -695,11 +709,13 @@ export class Game {
     const f = bug.fly!
     const bp = this.ball.body.translation()
     f.mode = 'orbit'
+    f.far = !this.canLift(bug)
     f.theta = Math.atan2(bug.sprite.y - bp.y, bug.sprite.x - bp.x)
     f.orbitR = Math.hypot(bug.sprite.x - bp.x, bug.sprite.y - bp.y)
     f.dir = this.rand() < 0.5 ? -1 : 1
     f.speed = range(this.rand, 1.2, 2.4)
-    f.until = this.time + range(this.rand, T.orbitSeconds[0], T.orbitSeconds[1])
+    const [lo, hi] = f.far ? T.bigFlyers.seconds : T.orbitSeconds
+    f.until = this.time + range(this.rand, lo, hi)
   }
 
   /** Away from the ball and upwards (flyers don't collide with the ground). */
@@ -708,7 +724,9 @@ export class Game {
     const bp = this.ball.body.translation()
     const dx = bug.sprite.x - bp.x, dy = bug.sprite.y - bp.y
     const out = norm(dx, -Math.abs(dy) - 0.5 * Math.hypot(dx, dy))
-    const speed = range(this.rand, 6, 11) * this.ball.r * boost
+    // Some fly the whole way, others only part of it.
+    const short = this.rand() < T.fleeShort.share ? T.fleeShort.scale : 1
+    const speed = range(this.rand, T.fleeSpeed[0], T.fleeSpeed[1]) * this.ball.r * boost * short
     f.mode = 'flee'
     f.vx = out.x * speed; f.vy = out.y * speed
     f.until = this.time + range(this.rand, 1.5, 3)
@@ -719,7 +737,7 @@ export class Game {
     const r = this.ball.r
     const light = T.lightRadius * r
     const flood = this.time < this.floodUntil
-    const halfW = (window.innerWidth / 2 / this.camScale) * 1.3, halfH = (window.innerHeight / 2 / this.camScale) * 1.3
+    const halfW = (window.innerWidth / 2 / this.viewScale) * 1.3, halfH = (window.innerHeight / 2 / this.viewScale) * 1.3
     const toAttach: Bug[] = []
     for (const bug of this.bugs) {
       const f = bug.fly
@@ -738,18 +756,22 @@ export class Game {
         // Lazy loops around home.
         tx = f.hx + f.wander * (Math.sin(f.t * 0.31 + f.phase) + 0.35 * Math.sin(f.t * 0.97 + f.phase * 3))
         ty = f.hy + f.wander * 0.45 * Math.sin(f.t * 0.53 + f.phase * 2)
-        if (!flood && dist < light * T.flyerNotice && this.time >= bug.regrabAt) this.startOrbit(bug)
+        // Insects too big to stick only notice a small ball now and then.
+        const keen = this.canLift(bug) || this.rand() < T.bigFlyers.notice * dt
+        if (!flood && dist < light * T.flyerNotice && this.time >= bug.regrabAt && keen) this.startOrbit(bug)
       } else if (f.mode === 'orbit') {
         f.theta += f.dir * f.speed * dt
         // Dorsal light response: they circle and bob, sometimes dipping into reach.
-        const want = r * (1.0 + 1.7 * (0.5 + 0.5 * Math.sin(f.t * 0.8 + f.phase)))
+        // (Ones too big to stick keep a wary distance.)
+        const want = r * (1.0 + 1.7 * (0.5 + 0.5 * Math.sin(f.t * 0.8 + f.phase))) + (f.far ? 0.6 * L + 1.5 * r : 0)
         f.orbitR += (want - f.orbitR) * Math.min(1, 1.5 * dt)
         tx = bp.x + Math.cos(f.theta) * f.orbitR
         ty = bp.y + Math.sin(f.theta) * f.orbitR
         rate = 5
         if (dist > light * T.flyerGiveUp || this.time > f.until) {
           f.mode = 'idle'; f.hx = sx; f.hy = sy - 2 * r; f.t = 0
-          bug.regrabAt = this.time + 3 // wander off for a while before the light pulls again
+          // Wander off for a while before the light pulls again (a long while, if too big to stick).
+          bug.regrabAt = this.time + (f.far ? range(this.rand, T.bigFlyers.rest[0], T.bigFlyers.rest[1]) : 3)
         }
       } else {
         f.vx *= Math.exp(-0.6 * dt); f.vy *= Math.exp(-0.6 * dt)
@@ -765,7 +787,7 @@ export class Game {
       bug.sprite.position.set(nx, ny)
       bug.sprite.scale.set(bug.def.mmPerPx * (1 + 0.07 * Math.sin(f.t * 34 + f.phase)))
 
-      if (Math.hypot(nx - bp.x, ny - bp.y) < r + 0.3 * L) {
+      if (Math.hypot(nx - bp.x, ny - bp.y) < this.catchRadius(L)) {
         if (this.canLift(bug)) toAttach.push(bug)
         else if (f.mode === 'orbit') { f.orbitR = r + L; f.dir = -f.dir }
       }
@@ -775,11 +797,15 @@ export class Game {
 
   // ─── flood light ─────────────────────────────────────────────────────────
 
-  /** Flood light: see everything for a moment, but insects nearby and on the ball's surface scatter. */
+  /**
+   * Flood light: see everything for a moment, zoomed out, then it recharges.
+   * Insects nearby and on the ball's surface scatter, and everything touching
+   * the ball takes off, which frees a ball wedged on an insect too big to lift.
+   */
   flood(): void {
-    if (this.paused || this.over || this.floodCharges <= 0 || this.time < this.floodUntil) return
-    this.floodCharges--
+    if (this.paused || this.over || this.time < this.floodReadyAt) return
     this.floodUntil = this.time + T.floodSeconds
+    this.floodReadyAt = this.floodUntil + T.floodRecharge
     const bp = this.ball.body.translation()
     const light = T.lightRadius * this.ball.r
     const view = this.viewRadius()
@@ -787,15 +813,56 @@ export class Game {
     for (const bug of this.bugs) {
       const d = Math.hypot(bug.sprite.x - bp.x, bug.sprite.y - bp.y)
       if (bug.mode === 'fly' && d < view) this.startFlee(bug, 1)
-      else if ((bug.mode === 'rest' || bug.mode === 'perch') && !bug.obstacle && d < T.floodScatterRange * light && this.rand() < T.floodScatterChance) startled.push(bug)
+      else if (bug.mode !== 'rest' && bug.mode !== 'perch') continue
+      else if (d < this.catchRadius(bug.info.length) + 0.3 * this.ball.r) startled.push(bug) // touching: even the big ones go
+      else if (!bug.obstacle && d < T.floodScatterRange * light && this.rand() < T.floodScatterChance) startled.push(bug)
     }
     for (const bug of startled) this.takeOff(bug, 'flee')
+    // A little hop, to shake loose; and a check that it worked.
+    this.popBall()
+    this.unstick = { at: this.time + 1, x: bp.x, y: bp.y }
 
     // Whatever juts out from the ball takes fright too: an awkward ball comes out smoother (and smaller).
     const r = this.ball.r
     const jutting = this.stuck.filter((b) => !b.baked && this.poke(b) > T.floodShed.poke * r).sort((a, b) => this.poke(b) - this.poke(a))
     for (const bug of jutting.slice(0, T.floodShed.max)) this.shed(bug)
     this.onBallResized()
+  }
+
+  private popBall(): void {
+    const body = this.ball.body
+    body.applyImpulse({ x: 0, y: -body.mass() * Math.sqrt(2 * T.gravity * this.ball.r * T.floodPop * this.ball.r) }, true)
+  }
+
+  /**
+   * A second after a flash: if the ball still hasn't got anywhere, whatever
+   * insect it's pressed against is zapped (gone from the night) so play goes on.
+   */
+  private checkUnstuck(): void {
+    const from = this.unstick!
+    this.unstick = null
+    const p = this.ball.body.translation(), r = this.ball.r
+    if (Math.hypot(p.x - from.x, p.y - from.y) > 0.5 * r) return
+    const pinning = new Set<Bug>()
+    for (const c of this.ballColliders()) {
+      this.world.contactPairsWith(c, (other) => {
+        const bug = this.byCollider.get(other.handle)
+        if (bug && bug.mode === 'rest') pinning.add(bug)
+      })
+    }
+    for (const bug of pinning) this.zap(bug)
+    if (pinning.size) { this.popBall(); this.hud.pickup(`Zapped ${pinning.size === 1 ? 'an insect' : `${pinning.size} insects`} to get free`) }
+  }
+
+  private zap(bug: Bug): void {
+    if (bug.collider) {
+      this.byCollider.delete(bug.collider.handle)
+      this.ledges.removeInsect(bug.collider.handle)
+      this.world.removeCollider(bug.collider, true)
+      bug.collider = null
+    }
+    bug.mode = 'gone'
+    bug.sprite.removeFromParent()
   }
 
   // ─── camera, light, HUD ──────────────────────────────────────────────────
@@ -807,7 +874,12 @@ export class Game {
 
   /** Half the screen diagonal in world units. */
   private viewRadius(): number {
-    return Math.hypot(window.innerWidth, window.innerHeight) / 2 / this.camScale
+    return Math.hypot(window.innerWidth, window.innerHeight) / 2 / this.viewScale
+  }
+
+  /** How close a flying or perched insect's centre must come to stick. */
+  private catchRadius(L: number): number {
+    return T.catchReach * this.ball.r + T.catchLength * L
   }
 
   /** A lip just overhead that needs a bigger ball (or that the ball can now reach): for the HUD. */
@@ -841,12 +913,17 @@ export class Game {
     const onScreen = r * this.zoomTarget
     if (onScreen > restPx * T.zoomOutAt || onScreen < restPx * 0.6) this.zoomTarget = this.baseScale()
     this.camScale += (this.zoomTarget - this.camScale) * (1 - Math.exp(-2.2 * dt))
+    // The flood light pulls the camera out for a look at the wider playfield.
+    const floodOn = this.time < this.floodUntil - 0.35
+    this.floodZoomK += ((floodOn ? 1 : 0) - this.floodZoomK) * (1 - Math.exp(-(floodOn ? 4 : 5) * dt))
+    this.viewScale = this.camScale * (1 - (1 - T.floodZoom) * this.floodZoomK)
     const k = 1 - Math.exp(-3 * dt)
     this.camX += (p.x + clamp(v.x * 0.35, -6 * r, 6 * r) - this.camX) * k
     this.camY += (p.y - 1.2 * r - this.camY) * k
     const W = window.innerWidth, H = window.innerHeight
-    this.worldLayer.scale.set(this.camScale)
-    this.worldLayer.position.set(W / 2 - this.camX * this.camScale, H / 2 - this.camY * this.camScale)
+    const s = this.viewScale
+    this.worldLayer.scale.set(s)
+    this.worldLayer.position.set(W / 2 - this.camX * s, H / 2 - this.camY * s)
 
     // Night → dawn.
     const progress = clamp(this.time / this.nightSeconds, 0, 1)
@@ -854,9 +931,9 @@ export class Game {
     const flood = this.time < this.floodUntil
     const floodK = flood ? Math.min(1, (this.floodUntil - this.time) / 0.4, (this.time - (this.floodUntil - T.floodSeconds)) / 0.15) : 0
     const dark = (0.94 - 0.6 * dawn) * (1 - floodK)
-    const sx = W / 2 + (p.x - this.camX) * this.camScale
-    const sy = H / 2 + (p.y - this.camY) * this.camScale
-    this.darkness.draw(sx, sy, T.lightRadius * r * this.camScale, dark, 1 - 0.7 * dawn, this.time)
+    const sx = W / 2 + (p.x - this.camX) * s
+    const sy = H / 2 + (p.y - this.camY) * s
+    this.darkness.draw(sx, sy, T.lightRadius * r * s, dark, 1 - 0.7 * dawn, this.time)
     setSky(dawn)
 
     const gate = this.lipAhead()
@@ -867,8 +944,8 @@ export class Game {
       sunriseIn: Math.max(0, this.nightSeconds - this.time),
       clock: clockText(this.nightStart + progress * (this.nightEnd - this.nightStart)),
       dawn: progress,
-      floodCharges: this.floodCharges,
-      floodBase: T.floodCharges,
+      floodReady: clamp(1 - (this.floodReadyAt - this.time) / (T.floodSeconds + T.floodRecharge), 0, 1),
+      floodWait: Math.max(0, this.floodReadyAt - this.time),
       floodActive: flood,
       gate,
       paused: this.paused,
@@ -921,7 +998,7 @@ export class Game {
       stuck: this.stuck.length, lumps: this.stuck.filter((b) => b.collider).length, zone: this.zoneNow,
       on: on >= 0 ? this.gen.paths[this.gen.ledges[on]!.path]!.kind : this.ctrl.grounded ? 'floor' : 'air',
       time: Math.round(this.time * 10) / 10, grounded: this.ctrl.grounded,
-      fps: Math.round(this.app.ticker.FPS), flying, orbiting, flood: this.floodCharges,
+      fps: Math.round(this.app.ticker.FPS), flying, orbiting, floodIn: Math.round(Math.max(0, this.floodReadyAt - this.time)),
       jut: Math.round(Math.max(0, ...pokes) * 100) / 100, spines: pokes.filter((q) => q > 0.4).length,
       baked: this.stuck.filter((b) => b.baked).length,
       ms: Object.entries(this.perf).map(([k, v]) => `${k}=${v.toFixed(1)}`).join(' '),

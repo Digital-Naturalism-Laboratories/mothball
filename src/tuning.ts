@@ -12,6 +12,13 @@ export const T = {
   growth: 0.22,
   /** An insect can be picked up when its length is below this × core radius. */
   collectRatio: 0.9,
+  /**
+   * A flying or perched insect sticks once its centre is within this × core
+   * radius plus `catchLength` × its length: a little past the core, since the
+   * ball you see includes the insects poking out of it.
+   */
+  catchReach: 1.15,
+  catchLength: 0.45,
   /** Max stuck insects that keep their own collider (the lumps). */
   maxLumps: 120,
   /** A stuck insect keeps a collider while it pokes out more than this × radius. */
@@ -71,6 +78,13 @@ export const T = {
   obstacleShare: 0.05,
   /** Of the insects that don't fly, this share perch on plants (the rest sit on the ground). */
   perchShare: 0.45,
+  /**
+   * A share of every later zone's insects lives back in an earlier area (one
+   * zone back, sometimes two): too big to pick up when you first pass, a taste
+   * of what's coming and a reason to come back. Some stand guard upright at the
+   * start of an open path, blocking it until you can climb over or roll them up.
+   */
+  visitors: { share: 0.18, twoBack: 0.3, blockChance: 0.6, blockLength: [1.3, 2.2] as const },
   /** Share of decorative plants that grow big (taller, more leaves, more insects). */
   bigPlantShare: 0.18,
 
@@ -147,6 +161,13 @@ export const T = {
   flyerGiveUp: 1.7,
   /** …or after circling it this long (s). */
   orbitSeconds: [5, 14] as const,
+  /**
+   * Insects too big to stick are only weakly drawn to a small ball: a small
+   * chance per second of noticing it, a short, wide circle, then a long rest.
+   */
+  bigFlyers: { notice: 0.3, seconds: [1.5, 3.5] as const, rest: [10, 18] as const },
+  /** Scattering insects fly off at this many ball radii per second (they slow down as they go). */
+  fleeSpeed: [3.5, 6] as const,
   /** Chance per second that a lit insect takes off to the light. */
   takeoff: { perch: 0.25, rest: 0.04, path: 0.06 },
 
@@ -155,8 +176,12 @@ export const T = {
   lightRadius: 7,
   /** Real seconds from dusk to dawn. */
   nightSeconds: 300,
-  floodCharges: 3,
-  floodSeconds: 2,
+  /** After a flood light ends, it takes this long (s) to recharge. */
+  floodRecharge: 12,
+  /** The flood light lasts this long (s)… */
+  floodSeconds: 3,
+  /** …and pulls the camera out to this fraction of its zoom, so you see the wider playfield. */
+  floodZoom: 0.4,
   /** Insects within this many light radii may take fright at a flood light… */
   floodScatterRange: 2.2,
   /** …with this chance each. */
@@ -167,6 +192,13 @@ export const T = {
    * cost of what they added.
    */
   floodShed: { poke: 0.12, max: 40 },
+  /**
+   * The flood light also frees a wedged ball: every insect touching it (even one
+   * too big to pick up) takes off, and the ball gets a small hop (× radius).
+   */
+  floodPop: 0.5,
+  /** Of the insects that scatter, this share only fly off `scale` as far (the rest go the whole way). */
+  fleeShort: { share: 0.5, scale: 0.5 },
 
   // ── camera ──
   /** Core radius as a fraction of screen height, right after a zoom. */

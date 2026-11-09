@@ -193,6 +193,8 @@ export function generateLevel(bugs: PackBug[], seed = 1): GeneratedLevel {
   }
   const ofRole = (z: number, want: string) => zoneBugs[z]!.filter((i) => role[i] === want)
   const sitters = zoneBugs.map((_, z) => ofRole(z, 'rest'))
+  const perchers = zoneBugs.map((_, z) => ofRole(z, 'perch'))
+  const flyers = zoneBugs.map((_, z) => ofRole(z, 'fly'))
 
   // Obstacles: a few sitters from later zones, too long to pick up for most of
   // this one. Only low, flat ones, so a hop gets you over.
@@ -208,6 +210,28 @@ export function generateLevel(bugs: PackBug[], seed = 1): GeneratedLevel {
         if (rand() < 0.5 && fits(pool[k]!)) { obstacles[z]!.push(pool.splice(k, 1)[0]!); take-- }
       }
     }
+  }
+
+  // Visitors: some of each later zone's insects live back in an earlier area. The flat
+  // ground ones lie in the way as obstacles; the rest perch or fly there. A few long ones
+  // are kept aside to stand guard on open paths (placed once the paths exist).
+  const V = T.visitors
+  const guards: number[][] = zoneBugs.map(() => [])
+  for (let z = 1; z < nz; z++) {
+    const host = () => (z >= 2 && rand() < V.twoBack ? z - 2 : z - 1)
+    const take = (pool: number[]) => {
+      const out: number[] = []
+      for (let k = pool.length - 1; k >= 0; k--) if (rand() < V.share) out.push(pool.splice(k, 1)[0]!)
+      return out
+    }
+    for (const i of take(sitters[z]!)) {
+      const h = host(), R = zoneRadius[h]!, b = info[i]!
+      if (b.width <= 0.9 * R && b.length >= 1.4 * R) obstacles[h]!.push(i)
+      else if (b.length >= V.blockLength[0] * R && b.length <= V.blockLength[1] * R && rand() < 0.5) guards[h]!.push(i)
+      else perchers[h]!.push(i)
+    }
+    for (const i of take(perchers[z]!)) perchers[host()]!.push(i)
+    for (const i of take(flyers[z]!)) flyers[host()]!.push(i)
   }
 
   const paths: Path[] = []
@@ -354,8 +378,25 @@ export function generateLevel(bugs: PackBug[], seed = 1): GeneratedLevel {
     }
     branchIds.forEach((b, k) => placeAlong(branchWalk.get(b)!, onBranch[k]!, info, z, rand, placements, new Set(), b))
 
+    // Guards: a long insect standing upright just past the lip of some open paths, in the way
+    // until you can climb over it or roll it up. Spare ones perch instead.
+    const spare = guards[z]!
+    for (const b of branchIds) {
+      if (!spare.length || paths[b]!.needR > 0 || rand() > V.blockChance) continue
+      const i = spare.pop()!, g = info[i]!
+      const segs = concatPaths(branchWalk.get(b)!)
+      if (!segs.length) { spare.push(i); continue }
+      const at = pointAt(segs, 1.5 * R + g.width / 2)
+      placements.push({
+        bug: i, zone: z, mode: 'rest', path: b, obstacle: true, tx: at.tx, ty: at.ty,
+        x: at.x + at.nx * 0.48 * g.length, y: at.y + at.ny * 0.48 * g.length,
+        angle: Math.atan2(at.ny, at.nx) - g.axis + (rand() < 0.5 ? Math.PI : 0), // long axis straight up
+      })
+    }
+    perchers[z]!.push(...spare)
+
     // Perched insects: some sitting up on the alternative paths, the rest on plants (now and then a big one).
-    const perched = ofRole(z, 'perch')
+    const perched = perchers[z]!.slice()
     const perchTotal = perched.length
     shuffleInPlace(perched, rand)
     branchIds.forEach((b, k) => {
@@ -397,7 +438,7 @@ export function generateLevel(bugs: PackBug[], seed = 1): GeneratedLevel {
     }
 
     // Flyers hover over the area; some around the alternative paths.
-    for (const i of ofRole(z, 'fly')) {
+    for (const i of flyers[z]!) {
       const b = branchIds.length && rand() < 0.35 ? branchIds[Math.floor(rand() * branchIds.length)]! : -1
       let fx: number, fy: number
       if (b >= 0) {

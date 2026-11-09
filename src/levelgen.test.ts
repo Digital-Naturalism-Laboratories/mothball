@@ -123,12 +123,25 @@ describe('generateLevel', () => {
     }
   })
 
-  it('keeps obstacles low enough to hop over', () => {
+  it('keeps obstacles on the way through low enough to hop over (only guards on side paths stand tall)', () => {
     for (const p of level.placements) {
-      if (p.mode !== 'rest') continue
+      if (p.mode !== 'rest' || (p.path != null && level.paths[p.path]!.kind === 'branch')) continue
       const zone = level.zones[p.zone]!
       const info = level.info[p.bug]!
       if (info.length > 2 * zone.radius) expect(info.width).toBeLessThanOrEqual(0.9 * zone.radius + 1e-9)
+    }
+  })
+
+  it('sends some bigger insects back to earlier areas, and stands some on open side paths as guards', () => {
+    // Too big to pick up when you arrive (radius about R), and well past what the zone's own insects reach.
+    const tooBig = level.placements.filter((p) => level.info[p.bug]!.length > 1.4 * level.zones[p.zone]!.radius)
+    expect(tooBig.length).toBeGreaterThan(0.08 * level.placements.length)
+    expect(new Set(tooBig.map((p) => p.mode)).size).toBe(3)
+    const guards = level.placements.filter((p) => p.obstacle && p.path != null && level.paths[p.path]!.kind === 'branch')
+    expect(guards.length).toBeGreaterThan(0)
+    for (const g of guards) {
+      expect(level.paths[g.path!]!.needR).toBe(0)
+      expect(level.info[g.bug]!.length).toBeGreaterThan(T.visitors.blockLength[0] * level.zones[g.zone]!.radius - 1e-9)
     }
   })
 

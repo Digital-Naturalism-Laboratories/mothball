@@ -9,9 +9,10 @@ export type HudState = {
   /** Wall-clock time of night, from the insects' capture times. */
   clock: string
   dawn: number
-  floodCharges: number
-  /** Charges a night starts with. */
-  floodBase: number
+  /** 0 … 1: how far the flood light has recharged. */
+  floodReady: number
+  /** Seconds until it's ready. */
+  floodWait: number
   floodActive: boolean
   /** A lip overhead that asks for a size. */
   gate: { label: string; needMm: number; ok: boolean } | null
@@ -59,7 +60,8 @@ export class Hud {
     this.clock.classList.toggle('late', left <= 30)
     this.sub.textContent = `until sunrise · ${s.clock}`
     this.dawn.style.width = `${(s.dawn * 100).toFixed(1)}%`
-    this.flood.textContent = `Flood light ${'●'.repeat(s.floodCharges)}${'○'.repeat(Math.max(0, s.floodBase - s.floodCharges))}`
+    this.flood.textContent = s.floodActive ? 'Flood light' : s.floodReady >= 1 ? 'Flood light ready (F)' : `Flood light · ${Math.ceil(s.floodWait)} s`
+    this.flood.classList.toggle('ready', !s.floodActive && s.floodReady >= 1)
     this.flood.classList.toggle('active', s.floodActive)
     if (s.gate) {
       this.gate.hidden = false

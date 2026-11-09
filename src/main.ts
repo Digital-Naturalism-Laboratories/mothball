@@ -100,7 +100,7 @@ function showMenu(): void {
         <li>Some lips are too high until you've grown, and they lead up to new areas. A lumpy enough ball can sometimes lever its way up early.</li>
         <li>Mind the gaps up high: hop them, or be big enough to roll across.</li>
         <li>Insects caught in flight stick out like spines, so your ball gets awkward.</li>
-        <li><b>F</b> or <b>Ctrl</b>: flood light (×${T.floodCharges}). See everything for ${T.floodSeconds} s. Nearby insects scatter, and whatever juts out of your ball is shaken off, so you roll smoother but smaller.</li>
+        <li><b>F</b> or <b>Ctrl</b>: flood light. See the wider playfield for ${T.floodSeconds} s, then it recharges (${T.floodRecharge} s). Nearby insects scatter, anything you're stuck against takes off, and whatever juts out of your ball is shaken off, so you roll smoother but smaller.</li>
         <li>Dawn ends the night.</li>
       </ul>
     </div>`

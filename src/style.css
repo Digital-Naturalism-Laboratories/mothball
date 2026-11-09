@@ -42,6 +42,7 @@ body { user-select: none; -webkit-user-select: none; touch-action: none; }
 .hud-dawn i { display: block; height: 100%; background: linear-gradient(to right, #5b4ad6, #f2a078); }
 .hud-flood { font-size: 14px; color: var(--ink-dim); }
 .hud-flood.active { color: #fff6c8; }
+.hud-flood.ready { color: var(--ink); }
 .hud-gate { font-size: 13px; margin-top: 6px; color: #f2b38a; }
 .hud-gate.ok { color: #9fe0b0; }
 .hud-feed { position: absolute; left: 16px; bottom: 44px; display: flex; flex-direction: column-reverse; gap: 2px; font-size: 13px; text-shadow: 0 1px 4px #000; }

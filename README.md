@@ -16,10 +16,11 @@ Open `?level=<url>` to load a different pack. You can also drop a
 ## How it plays
 
 - **← →** roll, **↑ / Space** hop, **↓↓** (double tap) drop through the path you're on. Hops are single: you have to touch the ground again before the next one. Launch ramps add height. A path you drop through leaves you alone until you're clear of it, so rolling along just under it doesn't scoop you back up.
-- An insect sticks when its length is under your radius (`T.collectRatio` × core radius). Larger insects are obstacles until you grow.
+- An insect sticks when its length is under your radius (`T.collectRatio` × core radius). Larger insects are obstacles until you grow. Flying and perched insects stick as soon as they reach the ball you see, a little past the core (`T.catchReach`, `T.catchLength`), not only the core itself.
 - The ball grows by a share of each insect's real silhouette area (`T.growth`).
 - **The ball gets awkward.** Ground insects stick lying flat where they touched, even on top of other insects. A share of flyers and perchers (`T.headFirst`) hit the lamp head first and stand out like spines. Each stuck insect collides with its whole silhouette, legs and antennae included (traced from the atlas when the pack loads). So a ball full of crane flies tumbles over its own legs, and spines can lever you up onto things.
-- **The flood light** (**F** or **Ctrl**, 3 per night) shows everything for 2 s. Flyers scatter, nearby insects take off, and everything jutting out of your ball is shaken off. You roll smoother, but you lose what those insects added.
+- **The flood light** (**F** or **Ctrl**) lights everything for 3 s and pulls the camera out (`T.floodZoom`) for a look at the wider playfield, then recharges (`T.floodRecharge`, 12 s). Flyers scatter a short way (half of them only half as far, `T.fleeShort`), nearby insects take off, and everything jutting out of your ball is shaken off. You roll smoother, but you lose what those insects added. It also frees a stuck ball: everything touching it takes off, even insects too big to pick up, and the ball gets a small hop. If a second later the ball still hasn't moved, whatever it's pressed against is zapped, gone for the night.
+- Insects too big to stick are only weakly drawn to a small ball (`T.bigFlyers`): now and then one circles, keeping its distance, and soon wanders off for a long while.
 - A hard hit sends your newest lumps flying off.
 - Insects buried under newer ones are painted into a picture of the ball (a render texture) and their sprites dropped. So the ball stays packed all the way in, with the lamp glowing through, without drawing thousands of sprites.
 - The camera holds its zoom while you visibly swell, then pulls out in one move, Katamari-style.
@@ -74,8 +75,12 @@ Open `?level=<url>` to load a different pack. You can also drop a
    ball that's up on it.
 4. **Insects.** Flyers hover over each area, some around its paths. Ground
    insects are spread along the surfaces, smallest nearest where you arrive.
-   A few long, flat insects from later zones lie in the way as obstacles you
-   can hop over.
+   About a fifth of every later zone's insects live back in an earlier area,
+   one zone back or sometimes two (`T.visitors`). They're too big to pick up
+   when you first pass: a taste of what's coming, and a reason to go back.
+   Flat ones lie in the way as obstacles you can hop over; the rest perch or
+   fly. Some long ones stand upright just past the lip of an open side path
+   and block it until you can climb over them or roll them up.
 
 The floor is solid (convex slabs, not a bare line, so lumps can't poke through
 it). It reaches under every area, so a fall always lands somewhere you can
@@ -103,9 +108,10 @@ cd mothbot-classify
 bun scripts/chrome-harness/bake-game-level.ts <package-dir> <out.zip> <night-id> [night-id…] --detector Mothbot_MBD-0-2.pt
 ```
 
-The demo pack (`public/levels/bowedBarbo-demo.mothball.zip`, not committed;
-see `.gitignore`) is KrkCreate / bowedBarbo, nights 2026-06-22 and
-2026-06-28, MBD-0-2 run: 3,288 insects from 0.6 mm specks to 83 mm
+The demo pack (`public/levels/bowedBarbo-demo.mothball.zip`, the one the
+online game loads; other packs stay out of git, see `.gitignore`) is titled
+"Krk, Croatia (22 & 28 June 2026)": two nights from the Mothbox bowedBarbo on
+Krk, MBD-0-2 detector run, 3,288 insects from 0.6 mm specks to 83 mm
 hawk-moths, all with calibrated sizes.
 
 ### Pack format (v1)

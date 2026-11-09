@@ -3,3 +3,5 @@ dist
 .DS_Store
 # Level packs are baked from research datasets: decide per pack before committing one.
 public/levels/*.zip
+# Published (Andrew, 2026-11-09): the demo pack the online game loads.
+!public/levels/bowedBarbo-demo.mothball.zip
