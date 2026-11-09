@@ -1,10 +1,39 @@
 # Mothball
 
-A 2D, Katamari-style browser game made from Mothbox insect data. You play the
-trap's UV light. Roll up a night of insects before dawn. Each level is built
-from a real dataset. Every insect is a background-removed photo from the trap,
-at its real measured size.
+This is an experimental way to play with your automated insect monitoring -style data. You can use datasets collected from devices like Mothboxes to play a 2D, Katamari-style browser game.
 
+You play as a kind of rolling UV light that grows brighter (and stickier) as you get more bugs. You want to see how many bugs you can roll up before dawn. Each level is built
+from a real dataset, and every insect is a background-removed photo from the trap,
+at its real measured size. 
+
+<img width="1686" height="1554" alt="image" src="https://github.com/user-attachments/assets/f9e5ca7b-5960-4db2-8ae5-e49a23750668" />
+
+
+
+## Controls
+
+- **← →** roll,
+- **↑ / Space** hop,
+- **↓↓** (double tap) drop through the path you're on.
+
+## Making a custom level pack
+
+In **Mothbot Classify**, open a dataset and click **Export Visualization**,
+then **Export game level**. 
+
+<img width="843" height="969" alt="image" src="https://github.com/user-attachments/assets/dd13ce7c-c565-46ef-acf0-eeccaff9372a" />
+
+
+The pack uses the dialog's scope and filters
+(nights, taxa, blurriness, error/noise toggles, limit). Insects without a
+transparent `_nobg.png` silhouette are left out. The zip is saved to the
+package's `04_exports/`.
+
+
+
+# Tech Notes
+
+## Run Locally 
 ```
 bun install
 bun dev            # http://localhost:5173
@@ -13,9 +42,8 @@ bun dev            # http://localhost:5173
 Open `?level=<url>` to load a different pack. You can also drop a
 `.mothball.zip` onto the page, or use **Load a level pack…** on the menu.
 
-## How it plays
+## Description of the Full Ruleset of the Game
 
-- **← →** roll, **↑ / Space** hop, **↓↓** (double tap) drop through the path you're on. Hops are single: you have to touch the ground again before the next one. Launch ramps add height. A path you drop through leaves you alone until you're clear of it, so rolling along just under it doesn't scoop you back up.
 - An insect sticks when its length is under your radius (`T.collectRatio` × core radius). Larger insects are obstacles until you grow. Flying and perched insects stick as soon as they reach the ball you see, a little past the core (`T.catchReach`, `T.catchLength`), not only the core itself.
 - The ball grows by a share of each insect's real silhouette area (`T.growth`).
 - **The ball gets awkward.** Ground insects stick lying flat where they touched, even on top of other insects. A share of flyers and perchers (`T.headFirst`) hit the lamp head first and stand out like spines. Each stuck insect collides with its whole silhouette, legs and antennae included (traced from the atlas when the pack loads). So a ball full of crane flies tumbles over its own legs, and spines can lever you up onto things.
@@ -28,6 +56,7 @@ Open `?level=<url>` to load a different pack. You can also drop a
 - **Perched** insects sit on plant stalks (now and then a big plant) and along the paths. **Ground** insects are spread out; some crawl and they all twitch now and then. Lit insects may take off and join the swarm.
 - You can only see what your light reaches.
 - The night ends at sunrise. The clock counts down the real time left (`T.nightSeconds`), next to the time of night taken from the insects' capture times.
+
 
 ## How a level is built (`src/levelgen.ts`)
 
@@ -93,7 +122,7 @@ Everything is scaled to the ball's radius: gravity, speed, hop height and the
 camera. So the game feels the same at 1.5 mm as at 15 cm. A bare ball hops
 onto a lip about 0.9 × its radius up, at every size.
 
-## Making a level pack
+## Making a custom level pack
 
 In **Mothbot Classify**, open a dataset and click **Export Visualization**,
 then **Export game level**. The pack uses the dialog's scope and filters
@@ -164,16 +193,3 @@ URL flags: `?debug` draws colliders and shows fps, `?test` exposes `window.__gam
 
 All tuning lives in `src/tuning.ts`.
 
-## Logo
-
-The mark is the [Mothbox](https://github.com/Digital-Naturalism-Laboratories/Mothbox)
-logo (rays, moth and box, from `Mothbox/docs/assets/images/logos/Mothbox Logo
-Wide.svg`) set inside a glowing ball, the UV lamp: `src/assets/logo-ball.svg`,
-also the favicon. The name is set in Big Shoulders Stencil, the Mothbox logo's
-lettering (SIL Open Font License, `src/assets/fonts/OFL.txt`).
-
-## Stack
-
-Vite + TypeScript, [PixiJS 8](https://pixijs.com) for drawing,
-[Rapier 2D](https://rapier.rs) for physics, and fflate for the zips. It runs
-as a static site with no backend.
