@@ -1,0 +1,5 @@
+node_modules
+dist
+.DS_Store
+# Level packs are baked from research datasets: decide per pack before committing one.
+public/levels/*.zip

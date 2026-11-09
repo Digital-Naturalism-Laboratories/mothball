@@ -1,0 +1,25 @@
+{
+  "name": "mothball",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A 2D katamari-like browser game built from Mothbox insect datasets",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "check": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@dimforge/rapier2d-compat": "^0.21.0",
+    "fflate": "^0.8.2",
+    "pixi.js": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "~5.8.3",
+    "vite": "^7.1.2"
+  }
+}
