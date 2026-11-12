@@ -193,3 +193,5 @@ URL flags: `?debug` draws colliders and shows fps, `?test` exposes `window.__gam
 
 All tuning lives in `src/tuning.ts`.
 
+## Environmental Impact
+Mothball was made with help from a LLM using an estimated .5-2kilowatt-hours (about the equivalent of driving an electric car 3-12 km)
